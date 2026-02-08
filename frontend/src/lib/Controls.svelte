@@ -7,6 +7,9 @@
 
   let loading = false
   let indexLoading = {}
+  let newIndexName = ''
+  let newIndexPath = ''
+  let addingIndex = false
 
   async function startIndexing(indexName = null) {
     if (indexName) {
@@ -90,6 +93,53 @@
     }
   }
 
+  async function addIndex() {
+    if (!newIndexName.trim() || !newIndexPath.trim()) return
+    addingIndex = true
+
+    try {
+      const response = await fetch('/api/indices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newIndexName.trim(),
+          index_paths: [newIndexPath.trim()]
+        })
+      })
+      if (response.ok) {
+        newIndexName = ''
+        newIndexPath = ''
+        dispatch('statuschange')
+      } else {
+        const data = await response.json()
+        alert(`Failed to add index: ${data.error}`)
+      }
+    } catch (error) {
+      alert(`Error: ${error.message}`)
+    } finally {
+      addingIndex = false
+    }
+  }
+
+  async function removeIndex(indexName) {
+    if (!confirm(`Remove index "${indexName}"? This will stop indexing and remove the configuration.`)) return
+    indexLoading[indexName] = true
+
+    try {
+      const response = await fetch(`/api/indices/${indexName}`, { method: 'DELETE' })
+      if (response.ok) {
+        dispatch('statuschange')
+      } else {
+        const data = await response.json()
+        alert(`Failed to remove index: ${data.error}`)
+      }
+    } catch (error) {
+      alert(`Error: ${error.message}`)
+    } finally {
+      indexLoading[indexName] = false
+    }
+  }
+
   function formatDate(dateStr) {
     if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return 'Never'
     const date = new Date(dateStr)
@@ -130,6 +180,36 @@
     </div>
   </div>
 
+  <!-- Add Index -->
+  <div class="space-y-2">
+    <p class="text-sm font-medium text-gray-700">Add Index</p>
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+      <input
+        type="text"
+        bind:value={newIndexName}
+        placeholder="Index name (e.g. documents)"
+        class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+      />
+      <input
+        type="text"
+        bind:value={newIndexPath}
+        placeholder="Folder path (e.g. /mnt/Documents)"
+        class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+      />
+      <button
+        on:click={addIndex}
+        disabled={addingIndex || !newIndexName.trim() || !newIndexPath.trim()}
+        class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+      >
+        {#if addingIndex}
+          Adding...
+        {:else}
+          Add Index
+        {/if}
+      </button>
+    </div>
+  </div>
+
   <!-- Per-Index Control -->
   {#if indices.length > 0}
     <div class="space-y-3">
@@ -159,6 +239,14 @@
                 </p>
               {/if}
             </div>
+            <button
+              on:click={() => removeIndex(index.name)}
+              disabled={indexLoading[index.name]}
+              class="flex-shrink-0 ml-2 px-2 py-1 text-xs text-red-600 hover:bg-red-100 rounded transition-colors"
+              title="Remove index"
+            >
+              Remove
+            </button>
           </div>
           <div class="flex space-x-2">
             <button

@@ -42,10 +42,7 @@ WORKDIR /app
 COPY --from=backend-builder /build/plocate-ui /app/plocate-ui
 
 # Create directories for database and config
-RUN mkdir -p /var/lib/plocate /app/config
-
-# Create default config
-COPY config.example.yml /app/config.yml
+RUN mkdir -p /app/data /app/config
 
 # Expose port
 EXPOSE 8080

@@ -55,6 +55,8 @@ func main() {
 		api.POST("/control/stop/:indexName", handlers.StopIndexing)    // Stop specific index
 		api.POST("/control/scheduler/enable", handlers.EnableScheduler)
 		api.POST("/control/scheduler/disable", handlers.DisableScheduler)
+		api.POST("/indices", handlers.AddIndex)
+		api.DELETE("/indices/:indexName", handlers.RemoveIndex)
 	}
 
 	// Serve frontend (embedded or from filesystem)
@@ -63,8 +65,7 @@ func main() {
 	// Start server
 	port := config.AppConfig.Server.Port
 	log.Printf("Server starting on port %s", port)
-	log.Printf("Database path: %s", config.AppConfig.Plocate.DatabasePath)
-	log.Printf("Index paths: %v", config.AppConfig.Plocate.IndexPaths)
+	log.Printf("Configured indices: %d", len(config.AppConfig.Plocate.Indices))
 
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

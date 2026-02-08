@@ -21,34 +21,29 @@ cd plocate-ui
 
 Or download and extract the ZIP file to `/mnt/user/appdata/plocate-ui`
 
-### 2. Configure
+### 2. Configure docker-compose.yml
 
-Edit `config.yml` to specify which paths to index:
+Edit volume mounts to expose the folders you want to search:
 
 ```bash
-nano config.yml
+nano docker-compose.yml
 ```
 
-Minimum configuration:
+Ensure you have a writable config volume and your share mounts:
 ```yaml
-plocate:
-  database_path: "/var/lib/plocate/plocate.db"
-  index_paths:
-    - "/mnt/user"  # Change this to your desired paths
+volumes:
+  - /mnt/cache/appdata/plocate-ui/config:/app/config
+  - /mnt/cache/appdata/plocate-ui/db:/var/lib/plocate
+  - /mnt/user:/mnt/user:ro
 ```
 
-### 3. Run Setup Script (Easiest)
-
-```bash
-chmod +x unraid-setup.sh
-./unraid-setup.sh
-```
-
-**OR** manually with docker-compose:
+### 3. Build and Run
 
 ```bash
 docker-compose up -d
 ```
+
+The app auto-creates its config on first startup — no `config.yml` needed!
 
 ### 4. Access
 
@@ -61,47 +56,42 @@ Replace `YOUR-UNRAID-IP` with your Unraid server's IP address.
 
 ## First Time Usage
 
-1. **Trigger Initial Index**:
-   - Click "Start Index Now" in the Controls section
+1. **Add Folders to Index**:
+   - In the Controls section, enter an index name (e.g. "media") and folder path (e.g. "/mnt/user/media")
+   - Click "Add Index" — the folder is saved and persists across restarts
+
+2. **Trigger Initial Index**:
+   - Click "Start All" or Start on the individual index
    - Wait for indexing to complete (time depends on number of files)
    - Status will show "Last Indexed" time when done
 
-2. **Search**:
+3. **Search**:
    - Type a filename or part of a filename
    - Press Enter or click Search
    - Results appear instantly!
 
-3. **Automatic Updates**:
+4. **Automatic Updates**:
    - Scheduler runs automatically (default: every 6 hours)
-   - Adjust in `config.yml` if needed
 
 ## Common Paths to Index on Unraid
 
-```yaml
-index_paths:
-  - "/mnt/user/media"      # Media files
-  - "/mnt/user/documents"  # Documents
-  - "/mnt/user/downloads"  # Downloads
-  - "/mnt/cache"           # Cache drive
-```
+Add these via the UI Controls section:
+
+- `/mnt/user/media` — Media files
+- `/mnt/user/documents` — Documents
+- `/mnt/user/downloads` — Downloads
+- `/mnt/cache` — Cache drive
 
 ## Performance Tips
 
-1. **Use Cache Drive** for database:
-   ```yaml
-   database_path: "/var/lib/plocate/plocate.db"
-   ```
-   (Already configured in docker-compose to use `/mnt/cache/appdata/plocate-ui/db`)
+1. **Use Cache Drive** for database (already configured in docker-compose to use `/mnt/cache/appdata/plocate-ui/db`)
 
 2. **Index Specific Shares** instead of all of `/mnt/user`:
    - Faster indexing
    - Smaller database
    - More focused searches
 
-3. **Schedule During Low Usage**:
-   ```yaml
-   interval: "0 3 * * *"  # 3 AM daily
-   ```
+3. **Schedule During Low Usage**: Set `INDEX_INTERVAL=0 3 * * *` env var for 3 AM daily
 
 ## Troubleshooting
 

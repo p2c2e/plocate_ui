@@ -30,25 +30,12 @@ A modern, dockerized file search application powered by `plocate` - the fastest 
    cd plocate-ui
    ```
 
-2. **Edit the configuration** file:
-   ```bash
-   cp config.example.yml config.yml
-   nano config.yml
-   ```
-
-   Configure paths to index:
-   ```yaml
-   plocate:
-     database_path: "/var/lib/plocate/plocate.db"
-     index_paths:
-       - "/mnt/user/media"
-       - "/mnt/user/documents"
-       - "/mnt/cache"
-   ```
-
-3. **Edit docker-compose.yml** to configure volume mounts:
+2. **Edit docker-compose.yml** to configure volume mounts:
    ```yaml
    volumes:
+     # Config directory (writable - app auto-creates config on first run)
+     - /mnt/cache/appdata/plocate-ui/config:/app/config
+
      # Database on cache drive (recommended for performance)
      - /mnt/cache/appdata/plocate-ui/db:/var/lib/plocate
 
@@ -57,7 +44,7 @@ A modern, dockerized file search application powered by `plocate` - the fastest 
      - /mnt/cache:/mnt/cache:ro
    ```
 
-4. **Build and run**:
+3. **Build and run**:
    ```bash
    docker-compose up -d
    ```
@@ -65,13 +52,15 @@ A modern, dockerized file search application powered by `plocate` - the fastest 
 5. **Access the UI**:
    Open your browser to `http://YOUR-UNRAID-IP:8080`
 
+6. **Add folders to index** via the web UI Controls section — no config file editing needed!
+
 #### Method 2: Docker CLI
 
 ```bash
 docker run -d \
   --name plocate-ui \
   -p 8080:8080 \
-  -v /mnt/cache/appdata/plocate-ui/config.yml:/app/config.yml:ro \
+  -v /mnt/cache/appdata/plocate-ui/config:/app/config \
   -v /mnt/cache/appdata/plocate-ui/db:/var/lib/plocate \
   -v /mnt/user:/mnt/user:ro \
   -v /mnt/cache:/mnt/cache:ro \
@@ -86,47 +75,50 @@ Once published to CA, simply search for "Plocate UI" in Community Applications a
 
 ## Configuration
 
-### config.yml Structure
+The app auto-creates a default config file on first startup at `/app/config/config.yml`. You manage indices (folders to index) entirely through the web UI — no manual config editing required.
+
+### How It Works
+
+1. On first launch, the app creates a config with sensible defaults (no indices yet)
+2. Use the **Controls** section in the web UI to add folders you want to index
+3. Each folder becomes a named index with its own database file
+4. All changes are automatically saved to the config file and persist across restarts
+
+### config.yml Structure (auto-managed)
 
 ```yaml
 server:
-  port: "8080"  # Web UI port
+  port: "8080"
 
 plocate:
-  # Database location (recommend cache drive for performance)
-  database_path: "/var/lib/plocate/plocate.db"
+  indices:
+    - name: "media"
+      database_path: "/var/lib/plocate/media.db"
+      index_paths:
+        - "/mnt/media"
+      enabled: true
 
-  # Paths to index
-  index_paths:
-    - "/mnt/user"           # All user shares
-    - "/mnt/cache"          # Cache drive
-    # - "/mnt/disk1"        # Specific disk
-    # - "/mnt/user/media"   # Specific share
+    - name: "documents"
+      database_path: "/var/lib/plocate/documents.db"
+      index_paths:
+        - "/mnt/documents"
+      enabled: true
 
-  # Binary paths (usually don't need to change)
   updatedb_bin: "updatedb"
   plocate_bin: "plocate"
 
 scheduler:
   enabled: true
-
-  # Cron-style schedule
   interval: "0 */6 * * *"  # Every 6 hours
-
-  # Other examples:
-  # "0 2 * * *"     - Daily at 2 AM
-  # "0 3 * * 0"     - Weekly on Sunday at 3 AM
-  # "0 4 1 * *"     - Monthly on the 1st at 4 AM
 ```
 
 ### Environment Variables (Optional)
 
-Override config.yml settings with environment variables:
+Override settings with environment variables:
 
 - `PORT` - Web server port (default: 8080)
-- `PLOCATE_DB_PATH` - Database file path
 - `INDEX_INTERVAL` - Cron schedule string
-- `CONFIG_PATH` - Path to config file
+- `CONFIG_PATH` - Path to config file (default: `/app/config/config.yml`)
 
 ## Usage
 
@@ -142,7 +134,12 @@ Override config.yml settings with environment variables:
    - See next scheduled indexing
    - Check which paths are indexed
 
-3. **Control Indexing**:
+3. **Manage Indices**:
+   - **Add Index**: Enter a name and folder path to add a new index
+   - **Remove Index**: Click Remove on any existing index
+   - Changes are saved automatically and persist across restarts
+
+4. **Control Indexing**:
    - **Start Index Now**: Trigger immediate reindex
    - **Stop Indexing**: Cancel running index operation
    - **Enable/Disable Scheduler**: Control automatic indexing
@@ -152,9 +149,14 @@ Override config.yml settings with environment variables:
 The application also exposes a REST API:
 
 - `GET /api/status` - Get current status
+- `GET /api/indices` - List all index names
 - `GET /api/search?q=filename&limit=100` - Search files
-- `POST /api/control/start` - Start indexing
-- `POST /api/control/stop` - Stop indexing
+- `POST /api/indices` - Add a new index (`{ name, index_paths }`)
+- `DELETE /api/indices/:name` - Remove an index
+- `POST /api/control/start` - Start indexing all enabled indices
+- `POST /api/control/start/:name` - Start indexing a specific index
+- `POST /api/control/stop` - Stop all indexing
+- `POST /api/control/stop/:name` - Stop a specific index
 - `POST /api/control/scheduler/enable` - Enable scheduler
 - `POST /api/control/scheduler/disable` - Disable scheduler
 
@@ -182,17 +184,9 @@ curl -X POST "http://localhost:8080/api/control/start"
 
 2. **Use SSD cache**: If available, ensures fast index operations
 
-3. **Schedule indexing during low usage**:
-   ```yaml
-   interval: "0 3 * * *"  # 3 AM daily
-   ```
+3. **Schedule indexing during low usage**: Set `INDEX_INTERVAL` env var to `0 3 * * *` for 3 AM daily
 
-4. **Index specific shares** instead of entire `/mnt/user`:
-   ```yaml
-   index_paths:
-     - "/mnt/user/media"
-     - "/mnt/user/documents"
-   ```
+4. **Index specific shares** instead of entire `/mnt/user` — add individual folders via the UI
 
 5. **Limit indexed paths**: Only index what you need to search
 
@@ -319,7 +313,7 @@ Access development UI at `http://localhost:5173`
 
 **Solution**:
 1. Check logs: `docker logs plocate-ui`
-2. Verify config.yml syntax
+2. Ensure the config directory volume is writable
 3. Ensure port 8080 is not already in use
 4. Check volume mount paths exist
 

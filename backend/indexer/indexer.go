@@ -209,6 +209,42 @@ func (idx *Indexer) DisableScheduler() {
 	idx.mu.Unlock()
 }
 
+// AddIndex registers a new index at runtime.
+func (idx *Indexer) AddIndex(cfg config.IndexConfig) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	idx.indexStatuses[cfg.Name] = &IndexStatus{
+		Name:         cfg.Name,
+		IsIndexing:   false,
+		IndexedPaths: cfg.IndexPaths,
+		Enabled:      cfg.Enabled,
+		DatabasePath: cfg.DatabasePath,
+	}
+}
+
+// RemoveIndex stops and deregisters an index at runtime.
+func (idx *Indexer) RemoveIndex(name string) error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	status, exists := idx.indexStatuses[name]
+	if !exists {
+		return fmt.Errorf("index '%s' not found", name)
+	}
+
+	// Stop if currently indexing
+	if status.IsIndexing {
+		if cancel, ok := idx.cancelFuncs[name]; ok {
+			cancel()
+			delete(idx.cancelFuncs, name)
+		}
+	}
+
+	delete(idx.indexStatuses, name)
+	return nil
+}
+
 func (idx *Indexer) updateNextScheduled() {
 	if len(idx.cron.Entries()) > 0 {
 		idx.mu.Lock()

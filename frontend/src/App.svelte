@@ -50,7 +50,7 @@
 
     <!-- Search Card -->
     <div class="bg-white rounded-lg shadow-md p-6">
-      <Search />
+      <Search {status} />
     </div>
 
     <!-- Footer -->

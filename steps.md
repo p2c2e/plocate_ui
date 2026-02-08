@@ -7,54 +7,12 @@ SSH into your Unraid server and create the appdata directories:
 ```bash
 ssh root@YOUR-UNRAID-IP
 mkdir -p /mnt/cache/appdata/plocate-ui/db
-mkdir -p /mnt/cache/appdata/plocate-ui
+mkdir -p /mnt/cache/appdata/plocate-ui/config
 ```
 
-## Step 2: Create config.yml on the Unraid host
+No config file is needed — the app auto-creates one on first startup and you manage indices through the web UI.
 
-```bash
-nano /mnt/cache/appdata/plocate-ui/config.yml
-```
-
-Paste the following content (edit paths to match your shares):
-
-```yaml
-server:
-  port: "8080"
-
-plocate:
-  indices:
-    - name: "media"
-      database_path: "/var/lib/plocate/media.db"
-      index_paths:
-        - "/mnt/media"
-      enabled: true
-
-    - name: "documents"
-      database_path: "/var/lib/plocate/documents.db"
-      index_paths:
-        - "/mnt/documents"
-      enabled: true
-
-    - name: "downloads"
-      database_path: "/var/lib/plocate/downloads.db"
-      index_paths:
-        - "/mnt/downloads"
-      enabled: true
-
-  updatedb_bin: "updatedb"
-  plocate_bin: "plocate"
-
-scheduler:
-  enabled: true
-  interval: "0 */6 * * *"
-```
-
-Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
-
-**Important:** The `index_paths` values must match the **Container Path** you set in Step 3 below.
-
-## Step 3: Add the container in Unraid Web UI
+## Step 2: Add the container in Unraid Web UI
 
 1. Open Unraid web UI -> **Docker** tab
 2. Click **Add Container**
@@ -68,6 +26,8 @@ Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
 | Network Type | `Bridge` |
 | WebUI | `http://[IP]:[PORT:8080]` |
 
+**Important:** The folder paths you add via the web UI must match the **Container Path** side of your volume mounts, not the host path.
+
 5. Click **Add another Path, Port, Variable, Label, or Device** and add the following one at a time:
 
 ### Port
@@ -79,15 +39,15 @@ Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
 | Container Port | `8080` |
 | Host Port | `8080` |
 
-### Path: Config file
+### Path: Config directory
 
 | Field | Value |
 |---|---|
 | Config Type | Path |
 | Name | `Config` |
-| Container Path | `/app/config.yml` |
-| Host Path | `/mnt/cache/appdata/plocate-ui/config.yml` |
-| Access Mode | Read Only |
+| Container Path | `/app/config` |
+| Host Path | `/mnt/cache/appdata/plocate-ui/config` |
+| Access Mode | Read/Write |
 
 ### Path: Database
 
@@ -142,27 +102,21 @@ Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
 
 Unraid will automatically pull the image from Docker Hub and start the container.
 
-## Step 4: Verify it's running
+## Step 3: Verify it's running
 
 1. Go to the **Docker** tab -- you should see `plocate-ui` running with a green icon
 2. Click the container icon -> **WebUI** (or browse to `http://YOUR-UNRAID-IP:8080`)
-3. Click **Start Index Now** to trigger the first index
-4. Wait for indexing to finish, then search
-
-## Editing config.yml later
-
-Edit the file on the host:
-
-```bash
-nano /mnt/cache/appdata/plocate-ui/config.yml
-```
-
-Then restart the container from the Unraid Docker tab (click the container icon -> **Restart**). The container reads the config at startup, so changes require a restart.
+3. In the Controls section, add your indices:
+   - Enter a name (e.g. "media") and the container path (e.g. "/mnt/media")
+   - Click **Add Index**
+   - Repeat for each folder you want to search
+4. Click **Start All** to trigger the first index
+5. Wait for indexing to finish, then search!
 
 ## Adding more shares later
 
-1. Edit `/mnt/cache/appdata/plocate-ui/config.yml` -- add a new index entry with the new container path
-2. In Unraid Docker tab -> click `plocate-ui` icon -> **Edit** -> add a new **Path** mapping for the new share
-3. Click **Apply** (this recreates the container with the new mount)
+1. In Unraid Docker tab -> click `plocate-ui` icon -> **Edit** -> add a new **Path** mapping for the new share
+2. Click **Apply** (this recreates the container with the new mount)
+3. In the Plocate UI, add a new index pointing to the container path you just mapped
 
-**Remember:** The `index_paths` in config.yml must always match the **Container Path** side of your volume mounts, not the host path.
+All index configuration is managed through the web UI and automatically saved — no manual config file editing needed.

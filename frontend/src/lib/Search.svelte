@@ -1,28 +1,23 @@
 <script>
-  import { onMount } from 'svelte'
+  export let status
 
   let query = ''
   let results = []
   let loading = false
   let searchTime = 0
   let hasSearched = false
-  let availableIndices = []
   let selectedIndices = []
 
-  onMount(async () => {
-    // Fetch available indices
-    try {
-      const response = await fetch('/api/indices')
-      const data = await response.json()
-      if (response.ok && data.indices) {
-        availableIndices = data.indices
-        // Select all indices by default
-        selectedIndices = [...data.indices]
-      }
-    } catch (error) {
-      console.error('Failed to fetch indices:', error)
+  $: availableIndices = (status?.indices || []).map(idx => idx.name)
+
+  // Auto-select new indices and remove stale selections
+  $: {
+    const newIndices = availableIndices.filter(name => !selectedIndices.includes(name))
+    if (newIndices.length > 0) {
+      selectedIndices = [...selectedIndices, ...newIndices]
     }
-  })
+    selectedIndices = selectedIndices.filter(name => availableIndices.includes(name))
+  }
 
   function toggleIndex(indexName) {
     if (selectedIndices.includes(indexName)) {
