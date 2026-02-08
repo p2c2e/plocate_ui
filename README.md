@@ -30,13 +30,11 @@ A modern, dockerized file search application powered by `plocate` - the fastest 
    cd plocate-ui
    ```
 
-2. **Edit docker-compose.yml** to configure volume mounts:
+2. **Edit docker-compose.yml** to mount the folders you want to search:
    ```yaml
    volumes:
-     # Config directory (writable - app auto-creates config on first run)
+     # App data (writable)
      - /mnt/cache/appdata/plocate-ui/config:/app/config
-
-     # Database on cache drive (recommended for performance)
      - /mnt/cache/appdata/plocate-ui/db:/var/lib/plocate
 
      # Mount paths you want to search (read-only)
@@ -49,10 +47,7 @@ A modern, dockerized file search application powered by `plocate` - the fastest 
    docker-compose up -d
    ```
 
-5. **Access the UI**:
-   Open your browser to `http://YOUR-UNRAID-IP:8080`
-
-6. **Add folders to index** via the web UI Controls section — no config file editing needed!
+4. **Open the UI** at `http://YOUR-UNRAID-IP:8080` and add folders to index from the Controls section
 
 #### Method 2: Docker CLI
 
@@ -75,78 +70,44 @@ Once published to CA, simply search for "Plocate UI" in Community Applications a
 
 ## Configuration
 
-The app auto-creates a default config file on first startup at `/app/config/config.yml`. You manage indices (folders to index) entirely through the web UI — no manual config editing required.
+All configuration is done through the **web UI** — no config files to edit.
 
-### How It Works
+### Getting Started After Install
 
-1. On first launch, the app creates a config with sensible defaults (no indices yet)
-2. Use the **Controls** section in the web UI to add folders you want to index
-3. Each folder becomes a named index with its own database file
-4. All changes are automatically saved to the config file and persist across restarts
+1. Open `http://YOUR-UNRAID-IP:8080` in your browser
+2. In the **Controls** section, enter a name and folder path to create your first index
+3. Click **Start Index** to begin indexing
+4. Start searching!
 
-### config.yml Structure (auto-managed)
+### Managing Indices
 
-```yaml
-server:
-  port: "8080"
+- **Add Index**: Give it a name (e.g., "media") and a folder path (e.g., `/mnt/user/media`). The folder must be mounted in the container.
+- **Remove Index**: Click Remove on any existing index
+- **Start/Stop**: Control indexing per-index or all at once
+- **Enable/Disable Scheduler**: Toggle automatic reindexing
 
-plocate:
-  indices:
-    - name: "media"
-      database_path: "/var/lib/plocate/media.db"
-      index_paths:
-        - "/mnt/media"
-      enabled: true
-
-    - name: "documents"
-      database_path: "/var/lib/plocate/documents.db"
-      index_paths:
-        - "/mnt/documents"
-      enabled: true
-
-  updatedb_bin: "updatedb"
-  plocate_bin: "plocate"
-
-scheduler:
-  enabled: true
-  interval: "0 */6 * * *"  # Every 6 hours
-```
+All changes persist automatically across container restarts.
 
 ### Environment Variables (Optional)
 
-Override settings with environment variables:
+These can be set in `docker-compose.yml` or via `docker run -e`:
 
+- `TZ` - Timezone (default: UTC)
 - `PORT` - Web server port (default: 8080)
-- `INDEX_INTERVAL` - Cron schedule string
-- `CONFIG_PATH` - Path to config file (default: `/app/config/config.yml`)
+- `INDEX_INTERVAL` - Cron schedule for auto-indexing (default: `0 */6 * * *`, every 6 hours)
 
 ## Usage
 
 ### Web Interface
 
-1. **Search Files**:
-   - Enter filename or pattern in the search box
-   - Press Enter or click Search
-   - Results appear instantly with full paths
-
-2. **Monitor Status**:
-   - View last indexed time
-   - See next scheduled indexing
-   - Check which paths are indexed
-
-3. **Manage Indices**:
-   - **Add Index**: Enter a name and folder path to add a new index
-   - **Remove Index**: Click Remove on any existing index
-   - Changes are saved automatically and persist across restarts
-
-4. **Control Indexing**:
-   - **Start Index Now**: Trigger immediate reindex
-   - **Stop Indexing**: Cancel running index operation
-   - **Enable/Disable Scheduler**: Control automatic indexing
+1. **Search**: Enter a filename or pattern in the search box — results appear instantly
+2. **Monitor**: View indexing status, last indexed time, and next scheduled run
+3. **Manage Indices**: Add/remove folders to index from the Controls section
+4. **Control Indexing**: Start/stop indexing on demand, or toggle the automatic scheduler
 
 ### API Endpoints
 
-The application also exposes a REST API:
+For automation and scripting, the application also exposes a REST API:
 
 - `GET /api/status` - Get current status
 - `GET /api/indices` - List all index names

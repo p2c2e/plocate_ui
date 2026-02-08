@@ -26,20 +26,19 @@ docker-build: ## Build Docker image
 	docker build -t plocate-ui:latest .
 
 docker-run: ## Run Docker container
-	docker-compose up -d
+	docker compose up -d
 
 docker-stop: ## Stop Docker container
-	docker-compose down
+	docker compose down
 
 docker-logs: ## Show Docker logs
-	docker-compose logs -f
+	docker compose logs -f
 
 clean: ## Clean build artifacts
 	rm -rf frontend/dist
 	rm -rf frontend/node_modules
 	rm -rf backend/frontend
 	rm -f backend/plocate-ui
-	rm -f backend/go.sum
 
 test-backend: ## Run backend tests
 	cd backend && go test ./...
