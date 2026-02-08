@@ -1,0 +1,27 @@
+services:
+  plocate-ui:
+    build: .
+    container_name: plocate-ui
+    ports:
+      - "8080:8080"
+    volumes:
+      # Config file
+      - ./config.yml:/app/config.yml:ro
+
+      # Database location (place on cache drive for better performance)
+      - /mnt/c/Users/SudharsanRangarajan/plocate/appdata/plocate-ui/db:/var/lib/plocate
+
+      # Paths to index (modify these to match your Unraid shares)
+      - /mnt/c/Users/SudharsanRangarajan/Downloads:/mnt/Downloads:ro
+      - /mnt/c/Users/SudharsanRangarajan/plocate:/mnt/cache:rw
+      # - /mnt/disk1:/mnt/disk1:ro
+      # Add more paths as needed
+    environment:
+      - TZ=America/New_York
+      # Optional: Override config via environment variables
+      # - PORT=8080
+      # - PLOCATE_DB_PATH=/var/lib/plocate/plocate.db
+      # - INDEX_INTERVAL=0 */6 * * *
+    restart: unless-stopped
+    # Run with host network mode for better performance (optional)
+    # network_mode: host

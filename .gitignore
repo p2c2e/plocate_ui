@@ -1,0 +1,27 @@
+# Backend
+backend/plocate-ui
+backend/go.sum
+
+# Frontend
+frontend/node_modules
+frontend/dist
+frontend/package-lock.json
+
+# Config
+config.yml
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Database
+*.db

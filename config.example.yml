@@ -1,0 +1,36 @@
+server:
+  port: "8080"
+
+plocate:
+  # Path to the plocate database file
+  # For Unraid: Place this on your cache drive for better performance
+  # Example: /mnt/cache/appdata/plocate-ui/db/plocate.db
+  database_path: "/var/lib/plocate/plocate.db"
+
+  # Paths to index
+  # Add all the directories you want to search
+  # For Unraid, typically you'll want to index your user shares
+  index_paths:
+    - "/mnt/user"
+    # - "/mnt/user/media"
+    # - "/mnt/user/documents"
+    # - "/mnt/cache"
+    # - "/mnt/disk1"
+    # - "/mnt/disk2"
+
+  # Binary paths (usually don't need to change these)
+  updatedb_bin: "updatedb"
+  plocate_bin: "plocate"
+
+scheduler:
+  # Enable automatic indexing on a schedule
+  enabled: true
+
+  # Cron-style interval (default: every 6 hours)
+  # Format: minute hour day month weekday
+  # Examples:
+  #   "0 */6 * * *"   - Every 6 hours
+  #   "0 2 * * *"     - Daily at 2 AM
+  #   "0 3 * * 0"     - Weekly on Sunday at 3 AM
+  #   "0 4 1 * *"     - Monthly on the 1st at 4 AM
+  interval: "0 */6 * * *"
