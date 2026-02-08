@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"plocate-ui/indexer"
 
@@ -10,8 +11,9 @@ import (
 )
 
 type SearchRequest struct {
-	Query string `json:"query" binding:"required"`
-	Limit int    `json:"limit"`
+	Query   string   `json:"query" binding:"required"`
+	Limit   int      `json:"limit"`
+	Indices []string `json:"indices"` // Optional: if empty, searches all enabled indices
 }
 
 type SearchResponse struct {
@@ -27,6 +29,10 @@ func Search(c *gin.Context) {
 		req.Query = c.Query("q")
 		if limit := c.Query("limit"); limit != "" {
 			req.Limit, _ = strconv.Atoi(limit)
+		}
+		// Parse indices from query parameter (comma-separated)
+		if indices := c.Query("indices"); indices != "" {
+			req.Indices = strings.Split(indices, ",")
 		}
 	} else {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -47,7 +53,7 @@ func Search(c *gin.Context) {
 		req.Limit = 1000
 	}
 
-	results, err := indexer.Instance.Search(req.Query, req.Limit)
+	results, err := indexer.Instance.Search(req.Query, req.Limit, req.Indices)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

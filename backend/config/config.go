@@ -8,16 +8,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type IndexConfig struct {
+	Name         string   `yaml:"name"`
+	DatabasePath string   `yaml:"database_path"`
+	IndexPaths   []string `yaml:"index_paths"`
+	Enabled      bool     `yaml:"enabled"`
+}
+
 type Config struct {
 	Server struct {
 		Port string `yaml:"port"`
 	} `yaml:"server"`
 
 	Plocate struct {
-		DatabasePath string   `yaml:"database_path"`
-		IndexPaths   []string `yaml:"index_paths"`
-		UpdatedbBin  string   `yaml:"updatedb_bin"`
-		PlocateBin   string   `yaml:"plocate_bin"`
+		// Legacy fields for backward compatibility
+		DatabasePath string   `yaml:"database_path,omitempty"`
+		IndexPaths   []string `yaml:"index_paths,omitempty"`
+
+		// New multi-index configuration
+		Indices     []IndexConfig `yaml:"indices,omitempty"`
+		UpdatedbBin string        `yaml:"updatedb_bin"`
+		PlocateBin  string        `yaml:"plocate_bin"`
 	} `yaml:"plocate"`
 
 	Scheduler struct {
@@ -61,9 +72,6 @@ func Load(configPath string) error {
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = "8080"
 	}
-	if cfg.Plocate.DatabasePath == "" {
-		cfg.Plocate.DatabasePath = "/var/lib/plocate/plocate.db"
-	}
 	if cfg.Plocate.UpdatedbBin == "" {
 		cfg.Plocate.UpdatedbBin = "updatedb"
 	}
@@ -74,10 +82,30 @@ func Load(configPath string) error {
 		cfg.Scheduler.Interval = "0 */6 * * *" // Every 6 hours by default
 	}
 
-	// Ensure database directory exists
-	dbDir := filepath.Dir(cfg.Plocate.DatabasePath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		return fmt.Errorf("failed to create database directory: %w", err)
+	// Handle backward compatibility: convert old format to new format
+	if len(cfg.Plocate.Indices) == 0 {
+		if cfg.Plocate.DatabasePath == "" {
+			cfg.Plocate.DatabasePath = "/var/lib/plocate/plocate.db"
+		}
+		// Create a default index from legacy configuration
+		defaultIndex := IndexConfig{
+			Name:         "default",
+			DatabasePath: cfg.Plocate.DatabasePath,
+			IndexPaths:   cfg.Plocate.IndexPaths,
+			Enabled:      true,
+		}
+		if len(defaultIndex.IndexPaths) == 0 {
+			defaultIndex.IndexPaths = []string{"/"}
+		}
+		cfg.Plocate.Indices = []IndexConfig{defaultIndex}
+	}
+
+	// Ensure all index database directories exist
+	for _, index := range cfg.Plocate.Indices {
+		dbDir := filepath.Dir(index.DatabasePath)
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			return fmt.Errorf("failed to create database directory for index %s: %w", index.Name, err)
+		}
 	}
 
 	AppConfig = &cfg

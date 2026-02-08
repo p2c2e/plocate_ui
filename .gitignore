@@ -1,6 +1,7 @@
 # Backend
 backend/plocate-ui
 backend/go.sum
+backend/frontend
 
 # Frontend
 frontend/node_modules

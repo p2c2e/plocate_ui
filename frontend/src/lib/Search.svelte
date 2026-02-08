@@ -1,9 +1,44 @@
 <script>
+  import { onMount } from 'svelte'
+
   let query = ''
   let results = []
   let loading = false
   let searchTime = 0
   let hasSearched = false
+  let availableIndices = []
+  let selectedIndices = []
+
+  onMount(async () => {
+    // Fetch available indices
+    try {
+      const response = await fetch('/api/indices')
+      const data = await response.json()
+      if (response.ok && data.indices) {
+        availableIndices = data.indices
+        // Select all indices by default
+        selectedIndices = [...data.indices]
+      }
+    } catch (error) {
+      console.error('Failed to fetch indices:', error)
+    }
+  })
+
+  function toggleIndex(indexName) {
+    if (selectedIndices.includes(indexName)) {
+      selectedIndices = selectedIndices.filter(i => i !== indexName)
+    } else {
+      selectedIndices = [...selectedIndices, indexName]
+    }
+  }
+
+  function selectAllIndices() {
+    selectedIndices = [...availableIndices]
+  }
+
+  function deselectAllIndices() {
+    selectedIndices = []
+  }
 
   async function search() {
     if (!query.trim()) return
@@ -13,7 +48,19 @@
     const startTime = performance.now()
 
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=500`)
+      const requestBody = {
+        query: query,
+        limit: 500,
+        indices: selectedIndices
+      }
+
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      })
       const data = await response.json()
 
       if (response.ok) {
@@ -37,7 +84,7 @@
     }
   }
 
-  function highlightMatch(path, query) {
+  function highlightMatch(path) {
     const parts = path.split('/')
     const filename = parts[parts.length - 1]
     const directory = parts.slice(0, -1).join('/')
@@ -52,6 +99,46 @@
 <div class="space-y-4">
   <h2 class="text-2xl font-semibold text-gray-800 mb-4">Search Files</h2>
 
+  <!-- Index Selection -->
+  {#if availableIndices.length > 0}
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-medium text-gray-700">Search in indices:</p>
+        <div class="flex space-x-2">
+          <button
+            on:click={selectAllIndices}
+            class="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Select All
+          </button>
+          <span class="text-gray-400">|</span>
+          <button
+            on:click={deselectAllIndices}
+            class="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {#each availableIndices as indexName}
+          <label class="flex items-center space-x-2 px-3 py-1 bg-white border border-gray-300 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedIndices.includes(indexName)}
+              on:change={() => toggleIndex(indexName)}
+              class="form-checkbox h-4 w-4 text-blue-600 rounded"
+            />
+            <span class="text-sm text-gray-700">{indexName}</span>
+          </label>
+        {/each}
+      </div>
+      {#if selectedIndices.length === 0}
+        <p class="text-xs text-orange-600 mt-2">⚠️ No indices selected. Please select at least one index to search.</p>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Search Input -->
   <div class="flex space-x-2">
     <input
@@ -64,7 +151,7 @@
     />
     <button
       on:click={search}
-      disabled={loading || !query.trim()}
+      disabled={loading || !query.trim() || selectedIndices.length === 0}
       class="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-lg"
     >
       {#if loading}
@@ -93,7 +180,7 @@
     <div class="bg-gray-50 rounded-lg border border-gray-200 max-h-[600px] overflow-y-auto">
       <div class="divide-y divide-gray-200">
         {#each results as result}
-          {@const parts = highlightMatch(result, query)}
+          {@const parts = highlightMatch(result)}
           <div class="p-3 hover:bg-blue-50 transition-colors">
             <div class="flex items-start space-x-2">
               <span class="text-gray-400 mt-1">📄</span>
@@ -120,7 +207,7 @@
   {:else if hasSearched && !loading}
     <div class="text-center py-12 bg-gray-50 rounded-lg">
       <p class="text-gray-500 text-lg">No results found for "{query}"</p>
-      <p class="text-gray-400 text-sm mt-2">Try a different search term</p>
+      <p class="text-gray-400 text-sm mt-2">Try a different search term or select more indices</p>
     </div>
   {/if}
 

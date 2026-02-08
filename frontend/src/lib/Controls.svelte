@@ -6,11 +6,18 @@
   const dispatch = createEventDispatcher()
 
   let loading = false
+  let indexLoading = {}
 
-  async function startIndexing() {
-    loading = true
+  async function startIndexing(indexName = null) {
+    if (indexName) {
+      indexLoading[indexName] = true
+    } else {
+      loading = true
+    }
+
     try {
-      const response = await fetch('/api/control/start', { method: 'POST' })
+      const url = indexName ? `/api/control/start/${indexName}` : '/api/control/start'
+      const response = await fetch(url, { method: 'POST' })
       if (response.ok) {
         dispatch('statuschange')
       } else {
@@ -20,14 +27,24 @@
     } catch (error) {
       alert(`Error: ${error.message}`)
     } finally {
-      loading = false
+      if (indexName) {
+        indexLoading[indexName] = false
+      } else {
+        loading = false
+      }
     }
   }
 
-  async function stopIndexing() {
-    loading = true
+  async function stopIndexing(indexName = null) {
+    if (indexName) {
+      indexLoading[indexName] = true
+    } else {
+      loading = true
+    }
+
     try {
-      const response = await fetch('/api/control/stop', { method: 'POST' })
+      const url = indexName ? `/api/control/stop/${indexName}` : '/api/control/stop'
+      const response = await fetch(url, { method: 'POST' })
       if (response.ok) {
         dispatch('statuschange')
       } else {
@@ -37,7 +54,11 @@
     } catch (error) {
       alert(`Error: ${error.message}`)
     } finally {
-      loading = false
+      if (indexName) {
+        indexLoading[indexName] = false
+      } else {
+        loading = false
+      }
     }
   }
 
@@ -69,38 +90,96 @@
     }
   }
 
-  $: isIndexing = status?.is_indexing || false
+  function formatDate(dateStr) {
+    if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return 'Never'
+    const date = new Date(dateStr)
+    return date.toLocaleString()
+  }
+
+  $: indices = status?.indices || []
   $: hasSchedule = status?.next_scheduled && status.next_scheduled !== '0001-01-01T00:00:00Z'
+  $: anyIndexing = indices.some(idx => idx.is_indexing)
 </script>
 
 <div class="space-y-4">
   <h2 class="text-xl font-semibold text-gray-800 border-b pb-2">Controls</h2>
 
-  <!-- Manual Control -->
+  <!-- Global Control -->
   <div class="space-y-2">
-    <p class="text-sm font-medium text-gray-700">Manual Indexing</p>
+    <p class="text-sm font-medium text-gray-700">All Indices</p>
     <div class="flex space-x-2">
       <button
-        on:click={startIndexing}
-        disabled={loading || isIndexing}
+        on:click={() => startIndexing()}
+        disabled={loading || anyIndexing}
         class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-sm"
       >
-        {#if isIndexing}
+        {#if anyIndexing}
           Indexing...
         {:else}
-          Start Index Now
+          Start All
         {/if}
       </button>
 
       <button
-        on:click={stopIndexing}
-        disabled={loading || !isIndexing}
+        on:click={() => stopIndexing()}
+        disabled={loading || !anyIndexing}
         class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-sm"
       >
-        Stop Indexing
+        Stop All
       </button>
     </div>
   </div>
+
+  <!-- Per-Index Control -->
+  {#if indices.length > 0}
+    <div class="space-y-3">
+      <p class="text-sm font-medium text-gray-700">Individual Indices</p>
+      {#each indices as index}
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1">
+              <div class="flex items-center space-x-2">
+                <h3 class="font-medium text-gray-800">{index.name}</h3>
+                {#if !index.enabled}
+                  <span class="px-2 py-0.5 text-xs bg-gray-300 text-gray-700 rounded">Disabled</span>
+                {/if}
+                {#if index.is_indexing}
+                  <span class="px-2 py-0.5 text-xs bg-blue-500 text-white rounded animate-pulse">Indexing</span>
+                {/if}
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                Paths: {index.indexed_paths.join(', ')}
+              </p>
+              <p class="text-xs text-gray-500">
+                Last indexed: {formatDate(index.last_indexed)}
+              </p>
+              {#if index.last_error}
+                <p class="text-xs text-red-600 mt-1">
+                  Error: {index.last_error}
+                </p>
+              {/if}
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button
+              on:click={() => startIndexing(index.name)}
+              disabled={indexLoading[index.name] || index.is_indexing || !index.enabled}
+              class="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+            >
+              Start
+            </button>
+            <button
+              on:click={() => stopIndexing(index.name)}
+              disabled={indexLoading[index.name] || !index.is_indexing}
+              class="flex-1 px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+            >
+              Stop
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Scheduler Control -->
   <div class="space-y-2">
@@ -124,7 +203,7 @@
     </div>
     {#if hasSchedule}
       <p class="text-xs text-gray-600 mt-1">
-        ✓ Scheduler is active
+        ✓ Next run: {formatDate(status.next_scheduled)}
       </p>
     {/if}
   </div>
@@ -132,8 +211,8 @@
   <!-- Info -->
   <div class="bg-blue-50 border border-blue-200 rounded p-3 mt-4">
     <p class="text-xs text-blue-800">
-      <strong>Tip:</strong> The scheduler runs automatically at configured intervals.
-      You can also trigger manual indexing at any time.
+      <strong>Tip:</strong> You can index all enabled indices at once or index them individually.
+      The scheduler will automatically index all enabled indices.
     </p>
   </div>
 </div>

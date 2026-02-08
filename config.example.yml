@@ -2,25 +2,47 @@ server:
   port: "8080"
 
 plocate:
-  # Path to the plocate database file
-  # For Unraid: Place this on your cache drive for better performance
-  # Example: /mnt/cache/appdata/plocate-ui/db/plocate.db
-  database_path: "/var/lib/plocate/plocate.db"
+  # Multiple indices configuration
+  # Each index can have its own database file and search paths
+  # This allows you to organize and search different parts of your filesystem separately
+  indices:
+    - name: "main"
+      database_path: "/var/lib/plocate/main.db"
+      index_paths:
+        - "/mnt/user"
+      enabled: true
 
-  # Paths to index
-  # Add all the directories you want to search
-  # For Unraid, typically you'll want to index your user shares
-  index_paths:
-    - "/mnt/user"
-    # - "/mnt/user/media"
-    # - "/mnt/user/documents"
-    # - "/mnt/cache"
-    # - "/mnt/disk1"
-    # - "/mnt/disk2"
+    - name: "media"
+      database_path: "/var/lib/plocate/media.db"
+      index_paths:
+        - "/mnt/user/media"
+        - "/mnt/user/movies"
+        - "/mnt/user/tv"
+      enabled: true
+
+    - name: "documents"
+      database_path: "/var/lib/plocate/documents.db"
+      index_paths:
+        - "/mnt/user/documents"
+        - "/mnt/user/downloads"
+      enabled: true
+
+    # Example: Disable an index by setting enabled: false
+    # - name: "cache"
+    #   database_path: "/var/lib/plocate/cache.db"
+    #   index_paths:
+    #     - "/mnt/cache"
+    #   enabled: false
 
   # Binary paths (usually don't need to change these)
   updatedb_bin: "updatedb"
   plocate_bin: "plocate"
+
+  # Legacy single-index configuration (still supported for backward compatibility)
+  # If you prefer the old format, you can use these fields instead of the 'indices' list
+  # database_path: "/var/lib/plocate/plocate.db"
+  # index_paths:
+  #   - "/mnt/user"
 
 scheduler:
   # Enable automatic indexing on a schedule

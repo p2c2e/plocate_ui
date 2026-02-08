@@ -14,35 +14,55 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-type Status struct {
+type IndexStatus struct {
+	Name          string    `json:"name"`
 	IsIndexing    bool      `json:"is_indexing"`
 	LastIndexed   time.Time `json:"last_indexed"`
 	LastError     string    `json:"last_error,omitempty"`
-	NextScheduled time.Time `json:"next_scheduled"`
 	IndexedPaths  []string  `json:"indexed_paths"`
+	Enabled       bool      `json:"enabled"`
+	DatabasePath  string    `json:"database_path"`
+}
+
+type Status struct {
+	Indices       []IndexStatus `json:"indices"`
+	NextScheduled time.Time     `json:"next_scheduled"`
 }
 
 type Indexer struct {
-	mu            sync.RWMutex
-	status        Status
-	cron          *cron.Cron
-	cancelCurrent context.CancelFunc
+	mu             sync.RWMutex
+	indexStatuses  map[string]*IndexStatus
+	cron           *cron.Cron
+	cancelFuncs    map[string]context.CancelFunc
+	nextScheduled  time.Time
 }
 
 var Instance *Indexer
 
 func Initialize() error {
-	Instance = &Indexer{
-		status: Status{
-			IndexedPaths: config.AppConfig.Plocate.IndexPaths,
-		},
-		cron: cron.New(),
+	indexStatuses := make(map[string]*IndexStatus)
+
+	// Initialize status for each configured index
+	for _, indexCfg := range config.AppConfig.Plocate.Indices {
+		indexStatuses[indexCfg.Name] = &IndexStatus{
+			Name:         indexCfg.Name,
+			IsIndexing:   false,
+			IndexedPaths: indexCfg.IndexPaths,
+			Enabled:      indexCfg.Enabled,
+			DatabasePath: indexCfg.DatabasePath,
+		}
 	}
 
-	// Setup scheduled indexing
+	Instance = &Indexer{
+		indexStatuses: indexStatuses,
+		cron:          cron.New(),
+		cancelFuncs:   make(map[string]context.CancelFunc),
+	}
+
+	// Setup scheduled indexing (indexes all enabled indices)
 	if config.AppConfig.Scheduler.Enabled {
 		_, err := Instance.cron.AddFunc(config.AppConfig.Scheduler.Interval, func() {
-			_ = Instance.StartIndexing()
+			_ = Instance.StartIndexingAll()
 		})
 		if err != nil {
 			return fmt.Errorf("failed to setup cron: %w", err)
@@ -58,35 +78,62 @@ func Initialize() error {
 func (idx *Indexer) GetStatus() Status {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	return idx.status
+
+	indices := make([]IndexStatus, 0, len(idx.indexStatuses))
+	for _, status := range idx.indexStatuses {
+		indices = append(indices, *status)
+	}
+
+	return Status{
+		Indices:       indices,
+		NextScheduled: idx.nextScheduled,
+	}
 }
 
-func (idx *Indexer) StartIndexing() error {
-	idx.mu.Lock()
-	if idx.status.IsIndexing {
-		idx.mu.Unlock()
-		return fmt.Errorf("indexing already in progress")
+func (idx *Indexer) GetIndexNames() []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	names := make([]string, 0, len(idx.indexStatuses))
+	for name := range idx.indexStatuses {
+		names = append(names, name)
 	}
-	idx.status.IsIndexing = true
-	idx.status.LastError = ""
+	return names
+}
+
+func (idx *Indexer) StartIndexing(indexName string) error {
+	idx.mu.Lock()
+	status, exists := idx.indexStatuses[indexName]
+	if !exists {
+		idx.mu.Unlock()
+		return fmt.Errorf("index '%s' not found", indexName)
+	}
+
+	if status.IsIndexing {
+		idx.mu.Unlock()
+		return fmt.Errorf("index '%s' is already being indexed", indexName)
+	}
+
+	status.IsIndexing = true
+	status.LastError = ""
 	idx.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	idx.mu.Lock()
-	idx.cancelCurrent = cancel
+	idx.cancelFuncs[indexName] = cancel
 	idx.mu.Unlock()
 
 	go func() {
-		err := idx.runUpdatedb(ctx)
+		err := idx.runUpdatedb(ctx, indexName)
 
 		idx.mu.Lock()
-		idx.status.IsIndexing = false
+		status.IsIndexing = false
 		if err != nil {
-			idx.status.LastError = err.Error()
+			status.LastError = err.Error()
 		} else {
-			idx.status.LastIndexed = time.Now()
+			status.LastIndexed = time.Now()
 		}
-		idx.cancelCurrent = nil
+		delete(idx.cancelFuncs, indexName)
 		idx.mu.Unlock()
 
 		idx.updateNextScheduled()
@@ -95,18 +142,58 @@ func (idx *Indexer) StartIndexing() error {
 	return nil
 }
 
-func (idx *Indexer) StopIndexing() error {
+func (idx *Indexer) StartIndexingAll() error {
+	var errors []string
+
+	for _, indexCfg := range config.AppConfig.Plocate.Indices {
+		if indexCfg.Enabled {
+			if err := idx.StartIndexing(indexCfg.Name); err != nil {
+				errors = append(errors, fmt.Sprintf("%s: %v", indexCfg.Name, err))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to start some indices: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+func (idx *Indexer) StopIndexing(indexName string) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	if !idx.status.IsIndexing {
-		return fmt.Errorf("no indexing in progress")
+	status, exists := idx.indexStatuses[indexName]
+	if !exists {
+		return fmt.Errorf("index '%s' not found", indexName)
 	}
 
-	if idx.cancelCurrent != nil {
-		idx.cancelCurrent()
+	if !status.IsIndexing {
+		return fmt.Errorf("index '%s' is not being indexed", indexName)
 	}
 
+	if cancel, exists := idx.cancelFuncs[indexName]; exists {
+		cancel()
+	}
+
+	return nil
+}
+
+func (idx *Indexer) StopIndexingAll() error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	for name, cancel := range idx.cancelFuncs {
+		if cancel != nil {
+			cancel()
+		}
+		if status, exists := idx.indexStatuses[name]; exists {
+			status.IsIndexing = false
+		}
+	}
+
+	idx.cancelFuncs = make(map[string]context.CancelFunc)
 	return nil
 }
 
@@ -118,29 +205,42 @@ func (idx *Indexer) EnableScheduler() {
 func (idx *Indexer) DisableScheduler() {
 	idx.cron.Stop()
 	idx.mu.Lock()
-	idx.status.NextScheduled = time.Time{}
+	idx.nextScheduled = time.Time{}
 	idx.mu.Unlock()
 }
 
 func (idx *Indexer) updateNextScheduled() {
 	if len(idx.cron.Entries()) > 0 {
 		idx.mu.Lock()
-		idx.status.NextScheduled = idx.cron.Entries()[0].Next
+		idx.nextScheduled = idx.cron.Entries()[0].Next
 		idx.mu.Unlock()
 	}
 }
 
-func (idx *Indexer) runUpdatedb(ctx context.Context) error {
+func (idx *Indexer) runUpdatedb(ctx context.Context, indexName string) error {
 	cfg := config.AppConfig.Plocate
+
+	// Find the index configuration
+	var indexCfg *config.IndexConfig
+	for i := range cfg.Indices {
+		if cfg.Indices[i].Name == indexName {
+			indexCfg = &cfg.Indices[i]
+			break
+		}
+	}
+
+	if indexCfg == nil {
+		return fmt.Errorf("index configuration for '%s' not found", indexName)
+	}
 
 	// Build updatedb command
 	args := []string{
-		"--output", cfg.DatabasePath,
+		"--output", indexCfg.DatabasePath,
 		"--prunepaths", "",
 	}
 
 	// Add paths to index
-	for _, path := range cfg.IndexPaths {
+	for _, path := range indexCfg.IndexPaths {
 		args = append(args, "--database-root", path)
 	}
 
@@ -154,15 +254,45 @@ func (idx *Indexer) runUpdatedb(ctx context.Context) error {
 	return nil
 }
 
-func (idx *Indexer) Search(query string, limit int) ([]string, error) {
+func (idx *Indexer) Search(query string, limit int, indexNames []string) ([]string, error) {
 	cfg := config.AppConfig.Plocate
 
-	args := []string{
-		"--database", cfg.DatabasePath,
-		"--limit", fmt.Sprintf("%d", limit),
+	// If no indices specified, search all enabled indices
+	if len(indexNames) == 0 {
+		for _, indexCfg := range cfg.Indices {
+			if indexCfg.Enabled {
+				indexNames = append(indexNames, indexCfg.Name)
+			}
+		}
 	}
 
-	// Add ignore case flag
+	if len(indexNames) == 0 {
+		return []string{}, fmt.Errorf("no indices available to search")
+	}
+
+	// Collect database paths for the specified indices
+	var dbPaths []string
+	for _, indexName := range indexNames {
+		found := false
+		for _, indexCfg := range cfg.Indices {
+			if indexCfg.Name == indexName {
+				dbPaths = append(dbPaths, indexCfg.DatabasePath)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("index '%s' not found", indexName)
+		}
+	}
+
+	// Build plocate command with multiple databases
+	args := []string{}
+
+	// Add all database paths (colon-separated as plocate expects)
+	args = append(args, "--database", strings.Join(dbPaths, ":"))
+
+	args = append(args, "--limit", fmt.Sprintf("%d", limit))
 	args = append(args, "--ignore-case", query)
 
 	cmd := exec.Command(cfg.PlocateBin, args...)

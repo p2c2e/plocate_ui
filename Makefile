@@ -12,6 +12,8 @@ frontend: ## Build frontend
 	cd frontend && npm install && npm run build
 
 backend: ## Build backend
+	mkdir -p backend/frontend
+	cp -r frontend/dist backend/frontend/
 	cd backend && go mod download && go build -o plocate-ui
 
 dev-frontend: ## Run frontend in development mode
@@ -35,6 +37,7 @@ docker-logs: ## Show Docker logs
 clean: ## Clean build artifacts
 	rm -rf frontend/dist
 	rm -rf frontend/node_modules
+	rm -rf backend/frontend
 	rm -f backend/plocate-ui
 	rm -f backend/go.sum
 

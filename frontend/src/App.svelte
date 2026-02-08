@@ -52,5 +52,12 @@
     <div class="bg-white rounded-lg shadow-md p-6">
       <Search />
     </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center">
+      <p class="text-sm text-gray-500">
+        Plocate UI <span class="font-semibold text-gray-700">v2.0.0</span> - Multi-Index Support
+      </p>
+    </div>
   </div>
 </main>

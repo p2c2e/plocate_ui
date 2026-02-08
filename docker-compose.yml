@@ -13,6 +13,7 @@ services:
 
       # Paths to index (modify these to match your Unraid shares)
       - /mnt/c/Users/SudharsanRangarajan/Downloads:/mnt/Downloads:ro
+      - /mnt/c/Users/SudharsanRangarajan/Documents:/mnt/Documents:ro
       - /mnt/c/Users/SudharsanRangarajan/plocate:/mnt/cache:rw
       # - /mnt/disk1:/mnt/disk1:ro
       # Add more paths as needed

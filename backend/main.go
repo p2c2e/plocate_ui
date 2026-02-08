@@ -46,10 +46,13 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.GET("/status", handlers.GetStatus)
+		api.GET("/indices", handlers.GetIndices)
 		api.GET("/search", handlers.Search)
 		api.POST("/search", handlers.Search)
-		api.POST("/control/start", handlers.StartIndexing)
-		api.POST("/control/stop", handlers.StopIndexing)
+		api.POST("/control/start", handlers.StartIndexing)             // Start all enabled indices
+		api.POST("/control/start/:indexName", handlers.StartIndexing)  // Start specific index
+		api.POST("/control/stop", handlers.StopIndexing)               // Stop all indices
+		api.POST("/control/stop/:indexName", handlers.StopIndexing)    // Stop specific index
 		api.POST("/control/scheduler/enable", handlers.EnableScheduler)
 		api.POST("/control/scheduler/disable", handlers.DisableScheduler)
 	}
